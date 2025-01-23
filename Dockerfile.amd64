@@ -1,0 +1,119 @@
+FROM debian:bookworm-slim AS builder
+
+ARG HTTP_PROXY
+ARG HTTPS_PROXY
+
+RUN apt -y update
+
+RUN apt install -y \
+        autoconf \
+        automake \
+        build-essential \
+        libtool \
+        curl \
+        pkg-config \
+        libpcre2-dev \
+        libyaml-dev \
+        libjansson-dev \
+        libpcap-dev \
+        libmagic-dev \
+        libcap-ng-dev \
+        liblz4-dev \
+        rustc \
+        cargo \
+        cbindgen \
+        zlib1g-dev \
+        libnet1-dev
+
+ARG VERSION
+
+WORKDIR /src
+
+#RUN if [ "${VERSION}" = "master" ]; then \
+#	git clone https://github.com/OISF/suricata.git suricata-${VERSION}; \
+#	git clone https://github.com/OISF/libhtp.git suricata-${VERSION}/libhtp; \
+#        (cd suricata-${VERSION}/suricata-update && \
+#		curl -L https://github.com/OISF/suricata-update/archive/master.tar.gz | tar zxf - --strip-components=1); \
+#	(cd suricata-${VERSION} && ./autogen.sh); \
+#else \
+#	curl -OL https://www.openinfosecfoundation.org/download/suricata-${VERSION}.tar.gz; \
+#	tar zxf suricata-${VERSION}.tar.gz; \
+#fi
+
+COPY suricata-${VERSION}.tar.gz ./
+RUN tar zxf suricata-${VERSION}.tar.gz
+
+WORKDIR /src/suricata-${VERSION}
+
+ARG CONFIGURE_ARGS
+
+RUN ./configure \
+        --prefix=/usr \
+        ${CONFIGURE_ARGS}
+
+ARG CORES=2
+
+RUN make -j "${CORES}"
+
+RUN make install install-conf DESTDIR=/fakeroot
+
+# Something about the Docker mounts won't let us copy /var/run in the
+# next stage.
+RUN rm -rf /fakeroot/var
+
+FROM debian:bookworm-slim AS runner
+
+RUN apt -y update
+
+RUN apt install -y \
+        autoconf \
+        automake \
+        build-essential \
+        libtool \
+        curl \
+        pkg-config \
+        libpcre2-dev \
+        libyaml-dev \
+        libjansson-dev \
+        libpcap-dev \
+        libmagic-dev \
+        libcap-ng-dev \
+        liblz4-dev \
+        rustc \
+        cargo \
+        cbindgen \
+        zlib1g-dev \
+        librdkafka-dev \
+        libnet1-dev
+
+COPY --from=builder /fakeroot /
+
+# Create the directories that didn't get copied from the previous stage.
+RUN mkdir -p /var/log/suricata /var/run/suricata /var/lib/suricata
+
+COPY /update.yaml /etc/suricata/update.yaml
+COPY /suricata.logrotate /etc/logrotate.d/suricata
+
+RUN suricata-update update-sources && \
+        suricata-update enable-source oisf/trafficid && \
+        suricata-update --no-test --no-reload && \
+        /usr/bin/suricata -V
+
+RUN useradd --system --create-home suricata && \
+        chown -R suricata:suricata /etc/suricata && \
+        chown -R suricata:suricata /var/log/suricata && \
+        chown -R suricata:suricata /var/lib/suricata && \
+        chown -R suricata:suricata /var/run/suricata && \
+        cp -a /etc/suricata /etc/suricata.dist && \
+        chmod 600 /etc/logrotate.d/suricata
+
+VOLUME /var/log/suricata
+VOLUME /var/lib/suricata
+VOLUME /var/run/suricata
+VOLUME /etc/suricata
+
+COPY /docker-entrypoint.sh /
+ENTRYPOINT ["/docker-entrypoint.sh"]
+
+RUN /usr/bin/suricata --build-info
+
