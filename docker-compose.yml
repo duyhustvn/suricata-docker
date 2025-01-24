@@ -1,6 +1,6 @@
 services:
   suricata:
-    image: custom-suricata:1.0
+    image: custom-suricata:1.0.1
     container_name: suricata
     network_mode: host
     cap_add:

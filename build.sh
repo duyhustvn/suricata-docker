@@ -36,6 +36,8 @@ ${docker} build --rm \
 	  --build-arg VERSION=${version} \
 	  --build-arg CORES=${cores} \
 	  --build-arg CONFIGURE_ARGS="${configure_args}" \
+	  --build-arg http_proxy="${PROXY}" \
+	  --build-arg https_proxy="${PROXY}" \
 	  ${tag} \
 	  -f Dockerfile.${arch} \
 	  .

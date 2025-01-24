@@ -1,7 +1,7 @@
 FROM debian:bookworm-slim AS builder
 
-ARG HTTP_PROXY
-ARG HTTPS_PROXY
+ARG http_proxy
+ARG https_proxy
 
 RUN apt -y update
 
@@ -63,6 +63,9 @@ RUN rm -rf /fakeroot/var
 
 FROM debian:bookworm-slim AS runner
 
+ARG http_proxy
+ARG https_proxy
+
 RUN apt -y update
 
 RUN apt install -y \
@@ -94,10 +97,10 @@ RUN mkdir -p /var/log/suricata /var/run/suricata /var/lib/suricata
 COPY /update.yaml /etc/suricata/update.yaml
 COPY /suricata.logrotate /etc/logrotate.d/suricata
 
-RUN suricata-update update-sources && \
-        suricata-update enable-source oisf/trafficid && \
-        suricata-update --no-test --no-reload && \
-        /usr/bin/suricata -V
+#RUN suricata-update update-sources && \
+#        suricata-update enable-source oisf/trafficid && \
+#        suricata-update --no-test --no-reload && \
+#        /usr/bin/suricata -V
 
 RUN useradd --system --create-home suricata && \
         chown -R suricata:suricata /etc/suricata && \
